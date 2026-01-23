@@ -74,16 +74,19 @@ public class StimulusManualController : MonoBehaviour
         {
             if (!executed)
             {
-                // 방향키/줌키를 안 눌렀으면 절대 실행 안 함
-                if (selected == TaskType.None) return;
+                // ⭐ 아무 것도 선택 안 했으면 → 랜덤으로 하나 선택
+                if (selected == TaskType.None)
+                {
+                    selected = GetRandomTask();
+                    ShowSelection();   // 화살표 / ZOOM 글씨 보여주기
+                }
 
-                // 한 번 실행
                 if (running != null) StopCoroutine(running);
                 running = StartCoroutine(ExecuteOnce(selected));
             }
             else
             {
-                // 실행 후 멈춘 상태 -> 복귀
+                // 실행 끝난 상태 → 초기 화면으로 복귀
                 if (running != null) StopCoroutine(running);
                 running = StartCoroutine(ReturnToCenter());
             }
@@ -276,5 +279,21 @@ public class StimulusManualController : MonoBehaviour
     {
         // 코루틴이 없으면 예외 안 나게 보호
         try { StopCoroutine(methodName); } catch { }
+    }
+
+    TaskType GetRandomTask()
+    {
+        TaskType[] pool = new TaskType[]
+        {
+        TaskType.Left,
+        TaskType.Right,
+        TaskType.Up,
+        TaskType.Down,
+        TaskType.ZoomIn,
+        TaskType.ZoomOut
+        };
+
+        int idx = Random.Range(0, pool.Length);
+        return pool[idx];
     }
 }
