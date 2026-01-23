@@ -3,6 +3,7 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.InputSystem.Controls;
+using LSL;
 
 public class StimulusManualController : MonoBehaviour
 {
@@ -35,20 +36,51 @@ public class StimulusManualController : MonoBehaviour
     [Header("Camera Follow (optional)")]
     public CameraFollow camFollow;
 
+    [Header("LSL (Markers)")]
+    public bool enableLSL = true;
+    public string lslStreamName = "UnityMarkers";
+    public string lslStreamType = "Markers";
+    public string lslSourceId = "unity_markers_001";
+    public bool logLSLToConsole = true; // 콘솔 로그 끄고 싶으면 false
+
     // ===== State =====
     TaskType selected = TaskType.None;  // 방향키 누르기 전에는 None
     bool executed = false;              // false=센터대기, true=실행 후 멈춤(복귀 대기)
     bool busy = false;
     Coroutine running;
 
+    // ===== LSL =====
+    StreamOutlet outlet;
+
+    // ✅ “한 실행(run)당 마커 1회” + “이전 코루틴이 늦게 끝나도 무시”
+    int currentRunId = 0;
+    bool stopMarkerSent = false;
+
+    // 코루틴 참조(정리용)
+    Coroutine moveCo;
+    Coroutine scaleCo;
+
     void Awake()
     {
-        // ✅ 혹시 다른 스크립트가 코루틴 돌려도 이 오브젝트에서 도는 건 전부 중단
         StopAllCoroutines();
     }
 
     void Start()
     {
+        if (enableLSL)
+        {
+            var info = new StreamInfo(
+                lslStreamName,
+                lslStreamType,
+                1,
+                0,
+                channel_format_t.cf_string,
+                lslSourceId
+            );
+            outlet = new StreamOutlet(info);
+            if (logLSLToConsole) Debug.Log($"[LSL] Stream started: {lslStreamName}");
+        }
+
         ResetToCenterInstant();
         HideTexts();
     }
@@ -74,11 +106,11 @@ public class StimulusManualController : MonoBehaviour
         {
             if (!executed)
             {
-                // ⭐ 아무 것도 선택 안 했으면 → 랜덤으로 하나 선택
+                // ⭐ 아무 것도 선택 안 했으면 → 랜덤 선택
                 if (selected == TaskType.None)
                 {
                     selected = GetRandomTask();
-                    ShowSelection();   // 화살표 / ZOOM 글씨 보여주기
+                    ShowSelection();
                 }
 
                 if (running != null) StopCoroutine(running);
@@ -86,7 +118,6 @@ public class StimulusManualController : MonoBehaviour
             }
             else
             {
-                // 실행 끝난 상태 → 초기 화면으로 복귀
                 if (running != null) StopCoroutine(running);
                 running = StartCoroutine(ReturnToCenter());
             }
@@ -99,34 +130,50 @@ public class StimulusManualController : MonoBehaviour
     {
         busy = true;
 
+        // ✅ 새 실행(run) 시작
+        currentRunId++;
+        int runId = currentRunId;
+        stopMarkerSent = false;
+
+        // 이전 코루틴 정리 (혹시 남아있으면)
+        if (moveCo != null) { StopCoroutine(moveCo); moveCo = null; }
+        if (scaleCo != null) { StopCoroutine(scaleCo); scaleCo = null; }
+
         bool isDir = (task == TaskType.Left || task == TaskType.Right || task == TaskType.Up || task == TaskType.Down);
 
         // 카메라 follow는 방향일 때만 ON
         if (camFollow != null)
             camFollow.enabled = isDir;
 
-        // 1) 타겟 배치
-        PlaceTarget(task);
+        // 1) 타겟 배치 (줌이면 스케일 애니메이션 시작)
+        PlaceTarget(task, runId);
 
         // 2) 텍스트(선택된 cue) 보여주기
         ShowCue(task);
 
-        // 3) 방향이면 검은공 이동
-        Coroutine moveCo = null;
+        // 3) 방향이면 검은공 이동 시작
         if (isDir)
-            moveCo = StartCoroutine(MoveBlackTowardTarget(moveDuration));
+            moveCo = StartCoroutine(MoveBlackTowardTarget(task, moveDuration, runId));
 
-        // 4) cueSec 후 텍스트 숨기기(공은 유지)
+        // 4) cueSec 후 텍스트 숨기기
         yield return new WaitForSeconds(cueSec);
         HideTexts();
 
-        // 5) 이동 끝까지 기다리기 (moveDuration 끝날 때까지)
+        // 5) 방향이면 이동 끝까지 대기 (마커는 Move 코루틴 끝에서만 전송됨)
         if (isDir)
-            yield return new WaitForSeconds(Mathf.Max(0f, moveDuration - cueSec));
+        {
+            float remain = Mathf.Max(0f, moveDuration - cueSec);
+            if (remain > 0f) yield return new WaitForSeconds(remain);
 
-        if (moveCo != null) StopCoroutine(moveCo);
+            // 최종 위치 보정(기존 동작 유지용)
+            SnapBlackToStopPoint();
+        }
+        else
+        {
+            // 줌은 scale 코루틴이 cueSec 동안 돌고, 끝에서만 마커 전송됨
+            // 여기서는 기존 로직처럼 cueSec만 기다리고 끝냄(기능 유지)
+        }
 
-        // ✅ 여기서 "멈춤": 아무것도 자동으로 안 함
         executed = true;
         busy = false;
     }
@@ -135,6 +182,10 @@ public class StimulusManualController : MonoBehaviour
     {
         busy = true;
 
+        // 진행 중 코루틴 정리
+        if (moveCo != null) { StopCoroutine(moveCo); moveCo = null; }
+        if (scaleCo != null) { StopCoroutine(scaleCo); scaleCo = null; }
+
         // 카메라 원위치
         if (camFollow != null)
         {
@@ -142,12 +193,10 @@ public class StimulusManualController : MonoBehaviour
             camFollow.ResetToStart();
         }
 
-        // 한 프레임 기다려서 카메라 리셋 반영
         yield return null;
 
         ResetToCenterInstant();
 
-        // 복귀 후에는 다시 선택해야 실행 가능
         executed = false;
         selected = TaskType.None;
         HideTexts();
@@ -168,7 +217,7 @@ public class StimulusManualController : MonoBehaviour
         }
     }
 
-    void PlaceTarget(TaskType task)
+    void PlaceTarget(TaskType task, int runId)
     {
         if (targetBall == null) return;
 
@@ -185,11 +234,13 @@ public class StimulusManualController : MonoBehaviour
         targetBall.position = new Vector3(0, height + zoomCenterYOffset, 0);
 
         float to = (task == TaskType.ZoomIn) ? zoomBigScale : zoomSmallScale;
-        StopCoroutineSafe(nameof(AnimateScale));
-        StartCoroutine(AnimateScale(normalScale, to, cueSec));
+
+        // scale 코루틴 시작(끝에서만 마커 전송)
+        if (scaleCo != null) StopCoroutine(scaleCo);
+        scaleCo = StartCoroutine(AnimateScale(task, normalScale, to, cueSec, runId));
     }
 
-    IEnumerator AnimateScale(float from, float to, float duration)
+    IEnumerator AnimateScale(TaskType task, float from, float to, float duration, int runId)
     {
         if (targetBall == null) yield break;
 
@@ -203,9 +254,12 @@ public class StimulusManualController : MonoBehaviour
             yield return null;
         }
         targetBall.localScale = Vector3.one * to;
+
+        // ✅ 줌 “완료 순간”은 여기 단 한 곳에서만
+        OnTaskCompleted(task, runId);
     }
 
-    IEnumerator MoveBlackTowardTarget(float seconds)
+    IEnumerator MoveBlackTowardTarget(TaskType task, float seconds, int runId)
     {
         if (blackBall == null || targetBall == null) yield break;
 
@@ -232,11 +286,58 @@ public class StimulusManualController : MonoBehaviour
             yield return null;
         }
         blackBall.position = end;
+
+        // ✅ 방향 “완료 순간”은 여기 단 한 곳에서만
+        OnTaskCompleted(task, runId);
+    }
+
+    void SnapBlackToStopPoint()
+    {
+        if (blackBall == null || targetBall == null) return;
+
+        Vector3 start = blackBall.position;
+        Vector3 tgt = targetBall.position;
+
+        start.y = height;
+        tgt.y = height;
+
+        Vector3 dir = tgt - start;
+        dir.y = 0f;
+        if (dir.sqrMagnitude < 1e-6f) return;
+
+        float dist = dir.magnitude;
+        Vector3 end = start + dir.normalized * Mathf.Max(0f, dist - stopDist);
+        end.y = height;
+
+        blackBall.position = end;
+    }
+
+    // ✅ 완료 콜백: runId가 현재 실행과 맞을 때만, 한 번만 LSL 전송
+    void OnTaskCompleted(TaskType task, int runId)
+    {
+        if (runId != currentRunId) return;  // 이전 실행에서 늦게 끝난 코루틴 무시
+        SendLSLStopMarkerOnce(task);
+    }
+
+    void SendLSLStopMarkerOnce(TaskType task)
+    {
+        if (stopMarkerSent) return;   // ⭐ 중복 방지
+        stopMarkerSent = true;
+
+        if (!enableLSL || outlet == null) return;
+
+        string marker = $"STOP_{task}";
+        outlet.push_sample(new string[] { marker });
+
+        if (logLSLToConsole)
+        {
+            double ts = LSL.LSL.local_clock();
+            Debug.Log($"[LSL] Sent marker: {marker} | local_clock={ts}");
+        }
     }
 
     void ShowSelection()
     {
-        // 선택만 했을 때 미리 보여주고 싶으면 유지
         ShowCue(selected);
     }
 
@@ -275,22 +376,16 @@ public class StimulusManualController : MonoBehaviour
         if (zoomText != null) zoomText.text = "";
     }
 
-    void StopCoroutineSafe(string methodName)
-    {
-        // 코루틴이 없으면 예외 안 나게 보호
-        try { StopCoroutine(methodName); } catch { }
-    }
-
     TaskType GetRandomTask()
     {
         TaskType[] pool = new TaskType[]
         {
-        TaskType.Left,
-        TaskType.Right,
-        TaskType.Up,
-        TaskType.Down,
-        TaskType.ZoomIn,
-        TaskType.ZoomOut
+            TaskType.Left,
+            TaskType.Right,
+            TaskType.Up,
+            TaskType.Down,
+            TaskType.ZoomIn,
+            TaskType.ZoomOut
         };
 
         int idx = Random.Range(0, pool.Length);
