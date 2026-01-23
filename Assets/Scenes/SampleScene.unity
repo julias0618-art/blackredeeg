@@ -230,7 +230,6 @@ GameObject:
   m_Component:
   - component: {fileID: 131714310}
   - component: {fileID: 131714309}
-  - component: {fileID: 131714308}
   - component: {fileID: 131714311}
   m_Layer: 0
   m_Name: Char_Right
@@ -239,19 +238,6 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!114 &131714308
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 131714307}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: bb0f009790816c8409947744f444edce, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::BillboardToCamera
-  cam: {fileID: 0}
 --- !u!212 &131714309
 SpriteRenderer:
   serializedVersion: 2
@@ -823,7 +809,6 @@ GameObject:
   m_Component:
   - component: {fileID: 613155495}
   - component: {fileID: 613155494}
-  - component: {fileID: 613155493}
   - component: {fileID: 613155496}
   m_Layer: 0
   m_Name: Char_Down
@@ -832,19 +817,6 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!114 &613155493
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 613155492}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: bb0f009790816c8409947744f444edce, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::BillboardToCamera
-  cam: {fileID: 0}
 --- !u!212 &613155494
 SpriteRenderer:
   serializedVersion: 2
@@ -968,30 +940,16 @@ MonoBehaviour:
   mainCamera: {fileID: 0}
   cueText: {fileID: 0}
   zoomText: {fileID: 0}
-  interTrialSec: 1
   cueSec: 0.8
-  targetSec: 2
+  moveDuration: 1.2
+  stopDist: 0.25
   height: 0.5
   distance: 1.6
   normalScale: 0.25
   zoomBigScale: 0.55
   zoomSmallScale: 0.15
   zoomCenterYOffset: 0.15
-  ballRadius: 0.125
-  cueMargin: 0.12
-  cuePreferredFromBlack: 0.45
-  moveBlackTowardTarget: 1
-  moveDuration: 1.2
-  resetBlackToCenterEachTrial: 1
   camFollow: {fileID: 0}
-  enableManualTrigger: 1
-  keyLeft: 276
-  keyRight: 275
-  keyUp: 273
-  keyDown: 274
-  keyZoomIn: 105
-  keyZoomOut: 111
-  useShuffleBag: 1
 --- !u!114 &751988570
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1009,30 +967,16 @@ MonoBehaviour:
   mainCamera: {fileID: 330585545}
   cueText: {fileID: 1020207343}
   zoomText: {fileID: 2126365567}
-  interTrialSec: 2.5
   cueSec: 0.7
-  targetSec: 1.2
+  moveDuration: 1.2
+  stopDist: 0.25
   height: 0.5
   distance: 1.6
   normalScale: 0.25
   zoomBigScale: 0.55
   zoomSmallScale: 0.15
   zoomCenterYOffset: 0.15
-  ballRadius: 0.125
-  cueMargin: 0.12
-  cuePreferredFromBlack: 0.45
-  moveBlackTowardTarget: 1
-  moveDuration: 1.2
-  resetBlackToCenterEachTrial: 1
   camFollow: {fileID: 0}
-  enableManualTrigger: 1
-  keyLeft: 276
-  keyRight: 275
-  keyUp: 273
-  keyDown: 274
-  keyZoomIn: 105
-  keyZoomOut: 111
-  useShuffleBag: 1
 --- !u!4 &751988571
 Transform:
   m_ObjectHideFlags: 0
@@ -1228,7 +1172,6 @@ GameObject:
   m_Component:
   - component: {fileID: 1007316446}
   - component: {fileID: 1007316445}
-  - component: {fileID: 1007316444}
   - component: {fileID: 1007316447}
   m_Layer: 0
   m_Name: Char_Left
@@ -1237,19 +1180,6 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!114 &1007316444
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1007316443}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: bb0f009790816c8409947744f444edce, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::BillboardToCamera
-  cam: {fileID: 0}
 --- !u!212 &1007316445
 SpriteRenderer:
   serializedVersion: 2
@@ -1596,7 +1526,6 @@ GameObject:
   m_Component:
   - component: {fileID: 1236831824}
   - component: {fileID: 1236831823}
-  - component: {fileID: 1236831822}
   - component: {fileID: 1236831825}
   m_Layer: 0
   m_Name: Char_Up
@@ -1605,19 +1534,6 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!114 &1236831822
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1236831821}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: bb0f009790816c8409947744f444edce, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::BillboardToCamera
-  cam: {fileID: 0}
 --- !u!212 &1236831823
 SpriteRenderer:
   serializedVersion: 2

@@ -1,12 +1,12 @@
 using System.Collections;
-using System.Collections.Generic;
+using TMPro;
 using UnityEngine;
 using UnityEngine.InputSystem;
-using TMPro;
+using UnityEngine.InputSystem.Controls;
 
-public class StimulusPresenter : MonoBehaviour
+public class StimulusManualController : MonoBehaviour
 {
-    public enum TaskType { Left, Right, Up, Down, ZoomIn, ZoomOut }
+    public enum TaskType { None, Left, Right, Up, Down, ZoomIn, ZoomOut }
 
     [Header("Scene Objects")]
     public Transform blackBall;
@@ -14,64 +14,145 @@ public class StimulusPresenter : MonoBehaviour
     public Camera mainCamera;
 
     [Header("UI (TextMeshPro)")]
-    public TMP_Text cueText;   // ← → ↑ ↓
-    public TMP_Text zoomText;  // "ZOOM +", "ZOOM -"
+    public TMP_Text cueText;
+    public TMP_Text zoomText;
 
-    [Header("Timing (seconds)")]
-    public float interTrialSec = 5.0f;
-    public float cueSec = 0.7f;
-    public float targetSec = 2.5f;
+    [Header("Timing")]
+    public float cueSec = 1.2f;        // 화살표/줌 텍스트 노출
+    public float moveDuration = 1.2f;  // 검은공 이동 시간(방향일 때)
+    public float stopDist = 0.25f;     // 빨간공 앞에서 멈추기
 
-    [Header("World Layout")]
+    [Header("Layout")]
     public float height = 0.5f;
     public float distance = 1.6f;
 
-    [Header("Ball Scale")]
+    [Header("Zoom")]
     public float normalScale = 0.25f;
     public float zoomBigScale = 0.55f;
     public float zoomSmallScale = 0.15f;
     public float zoomCenterYOffset = 0.15f;
 
-    [Header("IMPORTANT: Cue Safety (world units)")]
-    public float ballRadius = 0.125f;
-    public float cueMargin = 0.12f;
-    public float cuePreferredFromBlack = 0.45f;
-
-    [Header("Black Ball Movement (Only for Direction Tasks)")]
-    public bool moveBlackTowardTarget = true;
-    public float moveDuration = 1.2f;
-    public bool resetBlackToCenterEachTrial = true;
-
-    [Header("Camera Follow (only for direction tasks)")]
+    [Header("Camera Follow (optional)")]
     public CameraFollow camFollow;
 
-    // =========================
-    // ✅ Manual Trigger Settings
-    // =========================
-    [Header("Manual Trigger (Keyboard -> next trial)")]
-    public bool enableManualTrigger = true;
-    public KeyCode keyLeft = KeyCode.LeftArrow;
-    public KeyCode keyRight = KeyCode.RightArrow;
-    public KeyCode keyUp = KeyCode.UpArrow;
-    public KeyCode keyDown = KeyCode.DownArrow;
-    public KeyCode keyZoomIn = KeyCode.I;
-    public KeyCode keyZoomOut = KeyCode.O;
+    // ===== State =====
+    TaskType selected = TaskType.None;  // 방향키 누르기 전에는 None
+    bool executed = false;              // false=센터대기, true=실행 후 멈춤(복귀 대기)
+    bool busy = false;
+    Coroutine running;
 
-    // "다음 트라이얼 1회" 예약
-    private bool hasPendingTask = false;
-    private TaskType pendingTask;
-
-    // =========================
-    // ✅ Random "Shuffle Bag"
-    // =========================
-    [Header("Random Mode")]
-    public bool useShuffleBag = true; // true면 더 랜덤처럼 보임(연속 패턴 줄어듦)
-
-    private List<TaskType> bag = new List<TaskType>();
-    private Coroutine loopCo;
-    private Coroutine moveCo;
+    void Awake()
+    {
+        // ✅ 혹시 다른 스크립트가 코루틴 돌려도 이 오브젝트에서 도는 건 전부 중단
+        StopAllCoroutines();
+    }
 
     void Start()
+    {
+        ResetToCenterInstant();
+        HideTexts();
+    }
+
+    void Update()
+    {
+        if (Keyboard.current == null || busy) return;
+
+        // ✅ 실행 전(센터)일 때만 "선택" 입력 받기
+        if (!executed)
+        {
+            if (Pressed(Keyboard.current.leftArrowKey)) { selected = TaskType.Left; ShowSelection(); }
+            if (Pressed(Keyboard.current.rightArrowKey)) { selected = TaskType.Right; ShowSelection(); }
+            if (Pressed(Keyboard.current.upArrowKey)) { selected = TaskType.Up; ShowSelection(); }
+            if (Pressed(Keyboard.current.downArrowKey)) { selected = TaskType.Down; ShowSelection(); }
+
+            if (Pressed(Keyboard.current.iKey)) { selected = TaskType.ZoomIn; ShowSelection(); }
+            if (Pressed(Keyboard.current.oKey)) { selected = TaskType.ZoomOut; ShowSelection(); }
+        }
+
+        // ✅ Space = 실행/복귀 토글
+        if (Pressed(Keyboard.current.spaceKey))
+        {
+            if (!executed)
+            {
+                // 방향키/줌키를 안 눌렀으면 절대 실행 안 함
+                if (selected == TaskType.None) return;
+
+                // 한 번 실행
+                if (running != null) StopCoroutine(running);
+                running = StartCoroutine(ExecuteOnce(selected));
+            }
+            else
+            {
+                // 실행 후 멈춘 상태 -> 복귀
+                if (running != null) StopCoroutine(running);
+                running = StartCoroutine(ReturnToCenter());
+            }
+        }
+    }
+
+    bool Pressed(KeyControl k) => k != null && k.wasPressedThisFrame;
+
+    IEnumerator ExecuteOnce(TaskType task)
+    {
+        busy = true;
+
+        bool isDir = (task == TaskType.Left || task == TaskType.Right || task == TaskType.Up || task == TaskType.Down);
+
+        // 카메라 follow는 방향일 때만 ON
+        if (camFollow != null)
+            camFollow.enabled = isDir;
+
+        // 1) 타겟 배치
+        PlaceTarget(task);
+
+        // 2) 텍스트(선택된 cue) 보여주기
+        ShowCue(task);
+
+        // 3) 방향이면 검은공 이동
+        Coroutine moveCo = null;
+        if (isDir)
+            moveCo = StartCoroutine(MoveBlackTowardTarget(moveDuration));
+
+        // 4) cueSec 후 텍스트 숨기기(공은 유지)
+        yield return new WaitForSeconds(cueSec);
+        HideTexts();
+
+        // 5) 이동 끝까지 기다리기 (moveDuration 끝날 때까지)
+        if (isDir)
+            yield return new WaitForSeconds(Mathf.Max(0f, moveDuration - cueSec));
+
+        if (moveCo != null) StopCoroutine(moveCo);
+
+        // ✅ 여기서 "멈춤": 아무것도 자동으로 안 함
+        executed = true;
+        busy = false;
+    }
+
+    IEnumerator ReturnToCenter()
+    {
+        busy = true;
+
+        // 카메라 원위치
+        if (camFollow != null)
+        {
+            camFollow.enabled = false;
+            camFollow.ResetToStart();
+        }
+
+        // 한 프레임 기다려서 카메라 리셋 반영
+        yield return null;
+
+        ResetToCenterInstant();
+
+        // 복귀 후에는 다시 선택해야 실행 가능
+        executed = false;
+        selected = TaskType.None;
+        HideTexts();
+
+        busy = false;
+    }
+
+    void ResetToCenterInstant()
     {
         if (blackBall != null)
             blackBall.position = new Vector3(0, height, 0);
@@ -79,161 +160,64 @@ public class StimulusPresenter : MonoBehaviour
         if (targetBall != null)
         {
             targetBall.gameObject.SetActive(false);
+            targetBall.position = new Vector3(0, height, 0);
             targetBall.localScale = Vector3.one * normalScale;
         }
-
-        if (cueText != null) cueText.text = "";
-        if (zoomText != null)
-        {
-            zoomText.text = "";
-            zoomText.enableAutoSizing = false;
-            zoomText.fontSize = 36;
-        }
-
-        FillAndShuffleBag();
-
-        loopCo = StartCoroutine(StimulusLoop());
     }
 
-    void Update()
+    void PlaceTarget(TaskType task)
     {
-        if (!enableManualTrigger) return;
+        if (targetBall == null) return;
 
-        var kb = Keyboard.current;
-        if (kb == null) return;
+        Vector3 center = new Vector3(0, height, 0);
+        targetBall.gameObject.SetActive(true);
 
-        // 방향키
-        if (kb.leftArrowKey.wasPressedThisFrame) { pendingTask = TaskType.Left; hasPendingTask = true; }
-        else if (kb.rightArrowKey.wasPressedThisFrame) { pendingTask = TaskType.Right; hasPendingTask = true; }
-        else if (kb.upArrowKey.wasPressedThisFrame) { pendingTask = TaskType.Up; hasPendingTask = true; }
-        else if (kb.downArrowKey.wasPressedThisFrame) { pendingTask = TaskType.Down; hasPendingTask = true; }
+        // 방향: 축 절편에 정확히
+        if (task == TaskType.Right) { targetBall.position = center + new Vector3(+distance, 0, 0); targetBall.localScale = Vector3.one * normalScale; return; }
+        if (task == TaskType.Left) { targetBall.position = center + new Vector3(-distance, 0, 0); targetBall.localScale = Vector3.one * normalScale; return; }
+        if (task == TaskType.Up) { targetBall.position = center + new Vector3(0, 0, +distance); targetBall.localScale = Vector3.one * normalScale; return; }
+        if (task == TaskType.Down) { targetBall.position = center + new Vector3(0, 0, -distance); targetBall.localScale = Vector3.one * normalScale; return; }
 
-        // 줌 키: I / O (대문자/소문자 상관 없음)
-        else if (kb.iKey.wasPressedThisFrame) { pendingTask = TaskType.ZoomIn; hasPendingTask = true; }
-        else if (kb.oKey.wasPressedThisFrame) { pendingTask = TaskType.ZoomOut; hasPendingTask = true; }
+        // 줌: 중앙(살짝 위)에서 크기 변화
+        targetBall.position = new Vector3(0, height + zoomCenterYOffset, 0);
+
+        float to = (task == TaskType.ZoomIn) ? zoomBigScale : zoomSmallScale;
+        StopCoroutineSafe(nameof(AnimateScale));
+        StartCoroutine(AnimateScale(normalScale, to, cueSec));
     }
 
-
-    IEnumerator StimulusLoop()
+    IEnumerator AnimateScale(float from, float to, float duration)
     {
-        while (true)
+        if (targetBall == null) yield break;
+
+        float t = 0f;
+        while (t < duration)
         {
-            // 쉬는 시간(베이스라인)
-            yield return new WaitForSeconds(interTrialSec);
-
-            // 0) 이번 트라이얼 task 결정: (예약이 있으면 우선)
-            TaskType task = GetNextTask();
-
-            bool isDirection =
-                (task == TaskType.Left || task == TaskType.Right ||
-                 task == TaskType.Up || task == TaskType.Down);
-
-            // 1) 방향 과제면 Follow ON, 줌이면 OFF
-            if (camFollow != null)
-            {
-                camFollow.enabled = isDirection;
-
-                // ✅ 방향 트라이얼이면, 시작 순간 카메라를 즉시 맞춰서 "튕김" 제거
-                if (isDirection)
-                    camFollow.SnapNow();
-            }
-
-
-            // 2) (선택) 트라이얼 시작마다 검은공 원위치
-            if (resetBlackToCenterEachTrial && blackBall != null)
-                blackBall.position = new Vector3(0, height, 0);
-
-            // 3) 타겟/줌 배치
-            ShowTargetOrZoom(task);
-
-            // 4) 방향 과제(상하좌우)일 때만 검은공 이동
-            if (moveBlackTowardTarget && isDirection)
-            {
-                if (moveCo != null) StopCoroutine(moveCo);
-                moveCo = StartCoroutine(MoveBlackToTargetForSeconds(moveDuration));
-            }
-
-            // 5) 큐(화살표/줌텍스트) 표시
-            ShowCue(task);
-
-            // 6) 방향 과제면 화살표 위치 배치
-            if (isDirection)
-                PlaceCueOnLine_Safe();
-
-            // 7) cueSec 후 텍스트 숨김(공은 유지)
-            yield return new WaitForSeconds(cueSec);
-            HideTextsOnly();
-
-            // 8) 남은 시간 동안 공 유지
-            float remain = Mathf.Max(0f, targetSec - cueSec);
-            if (remain > 0f) yield return new WaitForSeconds(remain);
-
-            // 9) 종료
-            HideAll();
-            if (camFollow != null)
-            {
-                camFollow.enabled = false;
-                // camFollow.ResetToStart();  // ✅ 일단 주석 처리해서 튕김 줄이기
-            }
-
+            t += Time.deltaTime;
+            float a = Mathf.Clamp01(t / Mathf.Max(0.001f, duration));
+            float s = Mathf.Lerp(from, to, a);
+            targetBall.localScale = Vector3.one * s;
+            yield return null;
         }
+        targetBall.localScale = Vector3.one * to;
     }
 
-    TaskType GetNextTask()
-    {
-        // ✅ 예약이 있으면 우선 실행 (다음 트라이얼 1회)
-        if (hasPendingTask)
-        {
-            hasPendingTask = false;
-            return pendingTask;
-        }
-
-        // ✅ 기본은 랜덤
-        if (!useShuffleBag)
-            return (TaskType)Random.Range(0, 6);
-
-        // Shuffle-bag 방식(한 바퀴에 각 task를 1번씩)
-        if (bag.Count == 0) FillAndShuffleBag();
-
-        TaskType t = bag[0];
-        bag.RemoveAt(0);
-        return t;
-    }
-
-    void FillAndShuffleBag()
-    {
-        bag.Clear();
-        bag.Add(TaskType.Left);
-        bag.Add(TaskType.Right);
-        bag.Add(TaskType.Up);
-        bag.Add(TaskType.Down);
-        bag.Add(TaskType.ZoomIn);
-        bag.Add(TaskType.ZoomOut);
-
-        // Fisher–Yates shuffle
-        for (int i = bag.Count - 1; i > 0; i--)
-        {
-            int j = Random.Range(0, i + 1);
-            (bag[i], bag[j]) = (bag[j], bag[i]);
-        }
-    }
-
-    IEnumerator MoveBlackToTargetForSeconds(float seconds)
+    IEnumerator MoveBlackTowardTarget(float seconds)
     {
         if (blackBall == null || targetBall == null) yield break;
 
         Vector3 start = blackBall.position;
-
-        Vector3 dir = targetBall.position - start;
-        dir.y = 0f;
-
-        float stopDist = 0.25f; // 0.2~0.4 추천
-        Vector3 end = start;
-
-        if (dir.sqrMagnitude > 1e-6f)
-            end = start + dir.normalized * Mathf.Max(0f, dir.magnitude - stopDist);
+        Vector3 tgt = targetBall.position;
 
         start.y = height;
+        tgt.y = height;
+
+        Vector3 dir = tgt - start;
+        dir.y = 0f;
+        if (dir.sqrMagnitude < 1e-6f) yield break;
+
+        float dist = dir.magnitude;
+        Vector3 end = start + dir.normalized * Mathf.Max(0f, dist - stopDist);
         end.y = height;
 
         float t = 0f;
@@ -244,145 +228,53 @@ public class StimulusPresenter : MonoBehaviour
             blackBall.position = Vector3.Lerp(start, end, a);
             yield return null;
         }
-
         blackBall.position = end;
+    }
+
+    void ShowSelection()
+    {
+        // 선택만 했을 때 미리 보여주고 싶으면 유지
+        ShowCue(selected);
     }
 
     void ShowCue(TaskType task)
     {
-        if (task == TaskType.Left || task == TaskType.Right || task == TaskType.Up || task == TaskType.Down)
+        bool isDir = (task == TaskType.Left || task == TaskType.Right || task == TaskType.Up || task == TaskType.Down);
+
+        if (cueText != null)
         {
-            if (cueText != null)
+            cueText.text = isDir ? task switch
             {
-                cueText.text = task switch
-                {
-                    TaskType.Left => "←",
-                    TaskType.Right => "→",
-                    TaskType.Up => "↑",
-                    TaskType.Down => "↓",
-                    _ => ""
-                };
-            }
-            if (zoomText != null) zoomText.text = "";
-            return;
+                TaskType.Left => "←",
+                TaskType.Right => "→",
+                TaskType.Up => "↑",
+                TaskType.Down => "↓",
+                _ => ""
+            } : "";
         }
 
-        if (cueText != null) cueText.text = "";
         if (zoomText != null)
-            zoomText.text = (task == TaskType.ZoomIn) ? "ZOOM +" : "ZOOM -";
-    }
-
-    void HideTextsOnly()
-    {
-        if (cueText != null) cueText.text = "";
-        if (zoomText != null) zoomText.text = "";
-    }
-
-    void ShowTargetOrZoom(TaskType task)
-    {
-        if (targetBall == null) return;
-
-        Vector3 center = new Vector3(0, height, 0);
-
-        if (task == TaskType.Left || task == TaskType.Right || task == TaskType.Up || task == TaskType.Down)
         {
-            targetBall.gameObject.SetActive(true);
-            targetBall.localScale = Vector3.one * normalScale;
-
-            Vector3 offset = task switch
+            zoomText.enableAutoSizing = false;
+            zoomText.fontSize = 36;
+            zoomText.text = !isDir ? task switch
             {
-                TaskType.Right => new Vector3(+distance, 0, 0),
-                TaskType.Left => new Vector3(-distance, 0, 0),
-                TaskType.Up => new Vector3(0, 0, +distance),
-                TaskType.Down => new Vector3(0, 0, -distance),
-                _ => Vector3.zero
-            };
-
-            targetBall.position = center + offset;
-            return;
+                TaskType.ZoomIn => "ZOOM +",
+                TaskType.ZoomOut => "ZOOM -",
+                _ => ""
+            } : "";
         }
-
-        targetBall.gameObject.SetActive(true);
-        targetBall.position = new Vector3(0, height + zoomCenterYOffset, 0);
-
-        float to = (task == TaskType.ZoomIn) ? zoomBigScale : zoomSmallScale;
-        StartCoroutine(AnimateScale(normalScale, to, cueSec));
     }
 
-    IEnumerator AnimateScale(float from, float to, float duration)
+    void HideTexts()
     {
-        float t = 0f;
-        while (t < duration)
-        {
-            t += Time.deltaTime;
-            float a = Mathf.Clamp01(t / Mathf.Max(0.001f, duration));
-            float s = Mathf.Lerp(from, to, a);
-            if (targetBall != null) targetBall.localScale = Vector3.one * s;
-            yield return null;
-        }
-        if (targetBall != null) targetBall.localScale = Vector3.one * to;
-    }
-
-    void HideAll()
-    {
-        if (targetBall != null) targetBall.gameObject.SetActive(false);
         if (cueText != null) cueText.text = "";
         if (zoomText != null) zoomText.text = "";
-
-        if (moveCo != null)
-        {
-            StopCoroutine(moveCo);
-            moveCo = null;
-        }
-
-        if (blackBall != null)
-            blackBall.position = new Vector3(0, height, 0);
-
-        if (camFollow != null)
-        {
-            camFollow.enabled = false;
-            camFollow.ResetToStart();
-        }
     }
 
-    void PlaceCueOnLine_Safe()
+    void StopCoroutineSafe(string methodName)
     {
-        if (cueText == null || blackBall == null || targetBall == null || mainCamera == null) return;
-        if (!targetBall.gameObject.activeSelf) return;
-
-        Vector2 sb = mainCamera.WorldToScreenPoint(blackBall.position);
-        Vector2 st = mainCamera.WorldToScreenPoint(targetBall.position);
-
-        Vector2 v = st - sb;
-        float L = v.magnitude;
-        if (L < 5f) return;
-
-        Vector2 dir = v / L;
-
-        float minFromBlackPx = 120f;
-        float minGapToTargetPx = 140f;
-        float preferredFromBlackPx = 180f;
-
-        float dMin = minFromBlackPx;
-        float dMax = L - minGapToTargetPx;
-        bool noRoomOnLine = (dMax <= dMin);
-
-        float d = noRoomOnLine ? dMin : Mathf.Clamp(preferredFromBlackPx, dMin, dMax);
-        Vector2 pos = sb + dir * d;
-
-        bool vertical = Mathf.Abs(dir.y) > 0.85f;
-        if (vertical)
-        {
-            Vector2 normal = new Vector2(-dir.y, dir.x);
-            float sidePx = 55f;
-            pos += normal * sidePx;
-        }
-
-        if (cueText.text == "↓")
-        {
-            pos += Vector2.up * 35f;
-        }
-
-        cueText.rectTransform.position = new Vector3(pos.x, pos.y, 0);
+        // 코루틴이 없으면 예외 안 나게 보호
+        try { StopCoroutine(methodName); } catch { }
     }
 }
