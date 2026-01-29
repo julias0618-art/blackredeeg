@@ -3,6 +3,7 @@ using UnityEngine;
 public class CameraFollow : MonoBehaviour
 {
     public Transform target;   // 검은공
+    public bool isXR = false;
 
     [Header("Follow Axes (Top-Down)")]
     public bool followX = true;
@@ -24,6 +25,7 @@ public class CameraFollow : MonoBehaviour
 
     void LateUpdate()
     {
+        if (isXR) return;               // XR에서는 카메라 이동 금지
         if (locked) return;            // ✅ 핵심
         if (!enabled) return;
         if (target == null) return;
