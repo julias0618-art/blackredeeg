@@ -6,6 +6,8 @@ public class MoveTaskRunner : MonoBehaviour
 {
     public Transform blackBall;
     public Transform targetBall;
+    public Transform centerAnchor; // XR 기준 위치(예: XR Rig 원점)
+    public bool isXR = false;
 
     [Header("Layout")]
     public float height = 0.5f;
@@ -23,7 +25,7 @@ public class MoveTaskRunner : MonoBehaviour
     public void PrepareForMove()
     {
         // Move 시작 시 “줌 잔상”이랑 상관없이 공/타겟 상태만 정리
-        if (blackBall != null) blackBall.position = new Vector3(0, height, 0);
+        if (blackBall != null) blackBall.position = GetCenter();
 
         if (targetBall != null)
         {
@@ -36,7 +38,7 @@ public class MoveTaskRunner : MonoBehaviour
     {
         if (targetBall == null) return;
 
-        Vector3 center = new Vector3(0, height, 0);
+        Vector3 center = GetCenter();
         targetBall.gameObject.SetActive(true);
         targetBall.localScale = Vector3.one * normalScale;
 
@@ -47,6 +49,15 @@ public class MoveTaskRunner : MonoBehaviour
             case StimulusController.MoveTask.Up:    targetBall.position = center + new Vector3(0, 0, +distance); break;
             case StimulusController.MoveTask.Down:  targetBall.position = center + new Vector3(0, 0, -distance); break;
         }
+    }
+
+    Vector3 GetCenter()
+    {
+        if (isXR && centerAnchor != null)
+        {
+            return centerAnchor.position + new Vector3(0f, height, 0f);
+        }
+        return new Vector3(0f, height, 0f);
     }
 
     public void Run(StimulusController.MoveTask move, float moveDuration, int runId, Func<int, bool> isRunValid, Action onDone)
