@@ -4,6 +4,7 @@ using LSL;
 public class LSLMarkerSender : MonoBehaviour
 {
     public bool enableLSL = true;
+    public bool enableOnAndroid = false; // Quest 등 Android에서는 기본 비활성
     public string lslStreamName = "UnityMarkers";
     public string lslStreamType = "Markers";
     public string lslSourceId   = "unity_markers_001";
@@ -13,6 +14,10 @@ public class LSLMarkerSender : MonoBehaviour
 
     void Start()
     {
+        if (Application.platform == RuntimePlatform.Android && !enableOnAndroid)
+        {
+            enableLSL = false;
+        }
         if (!enableLSL) return;
 
         var info = new StreamInfo(lslStreamName, lslStreamType, 1, 0,
