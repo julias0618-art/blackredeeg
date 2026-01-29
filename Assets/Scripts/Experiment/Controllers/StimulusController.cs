@@ -8,10 +8,21 @@ public class StimulusController : MonoBehaviour
     public enum TrialType { None, Move, Zoom }
     public enum MoveTask  { Left, Right, Up, Down }
     public enum ZoomTask  { ZoomIn, ZoomOut }
+    public enum InputMode { Keyboard, XR }
 
     [Header("Timing")]
     public float cueSec = 1.2f;
     public float moveDuration = 1.2f;
+
+    [Header("Input")]
+    public InputMode inputMode = InputMode.Keyboard;
+    public InputActionReference selectAction;   // XR "select/confirm"
+    public InputActionReference moveLeftAction;
+    public InputActionReference moveRightAction;
+    public InputActionReference moveUpAction;
+    public InputActionReference moveDownAction;
+    public InputActionReference zoomInAction;
+    public InputActionReference zoomOutAction;
 
     [Header("Refs")]
     public CuePresenter cueUI;
@@ -29,24 +40,64 @@ public class StimulusController : MonoBehaviour
     int currentRunId = 0;
     Coroutine flowCo;
 
+    void OnEnable()
+    {
+        SetActionEnabled(selectAction, true);
+        SetActionEnabled(moveLeftAction, true);
+        SetActionEnabled(moveRightAction, true);
+        SetActionEnabled(moveUpAction, true);
+        SetActionEnabled(moveDownAction, true);
+        SetActionEnabled(zoomInAction, true);
+        SetActionEnabled(zoomOutAction, true);
+    }
+
+    void OnDisable()
+    {
+        SetActionEnabled(selectAction, false);
+        SetActionEnabled(moveLeftAction, false);
+        SetActionEnabled(moveRightAction, false);
+        SetActionEnabled(moveUpAction, false);
+        SetActionEnabled(moveDownAction, false);
+        SetActionEnabled(zoomInAction, false);
+        SetActionEnabled(zoomOutAction, false);
+    }
+
 
     void Update()
     {
-        if (Keyboard.current == null || busy) return;
+        if (busy) return;
+        if (inputMode == InputMode.Keyboard && Keyboard.current == null) return;
 
         // 수동 선택(센터 대기일 때만)
         if (!executed)
         {
-            if (Pressed(Keyboard.current.leftArrowKey))  { trial = TrialType.Move; selMove = MoveTask.Left;  cueUI?.ShowMoveCue(selMove); }
-            if (Pressed(Keyboard.current.rightArrowKey)) { trial = TrialType.Move; selMove = MoveTask.Right; cueUI?.ShowMoveCue(selMove); }
-            if (Pressed(Keyboard.current.upArrowKey))    { trial = TrialType.Move; selMove = MoveTask.Up;    cueUI?.ShowMoveCue(selMove); }
-            if (Pressed(Keyboard.current.downArrowKey))  { trial = TrialType.Move; selMove = MoveTask.Down;  cueUI?.ShowMoveCue(selMove); }
+            if (inputMode == InputMode.Keyboard)
+            {
+                if (Pressed(Keyboard.current.leftArrowKey))  { trial = TrialType.Move; selMove = MoveTask.Left;  cueUI?.ShowMoveCue(selMove); }
+                if (Pressed(Keyboard.current.rightArrowKey)) { trial = TrialType.Move; selMove = MoveTask.Right; cueUI?.ShowMoveCue(selMove); }
+                if (Pressed(Keyboard.current.upArrowKey))    { trial = TrialType.Move; selMove = MoveTask.Up;    cueUI?.ShowMoveCue(selMove); }
+                if (Pressed(Keyboard.current.downArrowKey))  { trial = TrialType.Move; selMove = MoveTask.Down;  cueUI?.ShowMoveCue(selMove); }
 
-            if (Pressed(Keyboard.current.iKey)) { trial = TrialType.Zoom; selZoom = ZoomTask.ZoomIn;  cueUI?.ShowZoomCue(selZoom); }
-            if (Pressed(Keyboard.current.oKey)) { trial = TrialType.Zoom; selZoom = ZoomTask.ZoomOut; cueUI?.ShowZoomCue(selZoom); }
+                if (Pressed(Keyboard.current.iKey)) { trial = TrialType.Zoom; selZoom = ZoomTask.ZoomIn;  cueUI?.ShowZoomCue(selZoom); }
+                if (Pressed(Keyboard.current.oKey)) { trial = TrialType.Zoom; selZoom = ZoomTask.ZoomOut; cueUI?.ShowZoomCue(selZoom); }
+            }
+            else
+            {
+                if (Pressed(moveLeftAction))  { trial = TrialType.Move; selMove = MoveTask.Left;  cueUI?.ShowMoveCue(selMove); }
+                if (Pressed(moveRightAction)) { trial = TrialType.Move; selMove = MoveTask.Right; cueUI?.ShowMoveCue(selMove); }
+                if (Pressed(moveUpAction))    { trial = TrialType.Move; selMove = MoveTask.Up;    cueUI?.ShowMoveCue(selMove); }
+                if (Pressed(moveDownAction))  { trial = TrialType.Move; selMove = MoveTask.Down;  cueUI?.ShowMoveCue(selMove); }
+
+                if (Pressed(zoomInAction))  { trial = TrialType.Zoom; selZoom = ZoomTask.ZoomIn;  cueUI?.ShowZoomCue(selZoom); }
+                if (Pressed(zoomOutAction)) { trial = TrialType.Zoom; selZoom = ZoomTask.ZoomOut; cueUI?.ShowZoomCue(selZoom); }
+            }
         }
 
-        if (Pressed(Keyboard.current.spaceKey))
+        bool selectPressed = inputMode == InputMode.Keyboard
+            ? Pressed(Keyboard.current.spaceKey)
+            : Pressed(selectAction);
+
+        if (selectPressed)
         {
             // 1) 랜덤 선택만
             if (!executed && trial == TrialType.None)
@@ -88,6 +139,20 @@ public class StimulusController : MonoBehaviour
     }
 
     bool Pressed(KeyControl k) => k != null && k.wasPressedThisFrame;
+    bool Pressed(InputActionReference a) => a != null && a.action != null && a.action.WasPressedThisFrame();
+
+    void SetActionEnabled(InputActionReference a, bool enabled)
+    {
+        if (a == null || a.action == null) return;
+        if (enabled)
+        {
+            if (!a.action.enabled) a.action.Enable();
+        }
+        else
+        {
+            if (a.action.enabled) a.action.Disable();
+        }
+    }
 
     void AssignRandomTrial()
     {
