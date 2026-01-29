@@ -7,9 +7,10 @@ public class ZoomTaskRunner : MonoBehaviour
     public Camera mainCamera;
     public CameraFollow camFollow;
     public Transform targetBall;
+    public bool isXR = false;
 
     [Header("TargetBall Scale Zoom (optional)")]
-    public bool zoomByTargetScale = false;
+    public bool zoomByTargetScale = true; // 기본 줌은 FOV 대신 타겟 스케일로 처리
     public float normalScale = 0.50f;
     public float zoomBigScale = 2.00f;
     public float zoomSmallScale = 0.15f;
@@ -21,7 +22,7 @@ public class ZoomTaskRunner : MonoBehaviour
     public float zoomOutDolly = 0.5f;
 
     [Header("Camera FOV (recommended)")]
-    public bool zoomByFOV = true;
+    public bool zoomByFOV = false; // FOV 변경은 과도한 줌/복구 문제 방지용으로 기본 비활성화
     public float zoomInFOV = 35f;
     public float zoomOutFOV = 80f;
 
@@ -52,7 +53,7 @@ public class ZoomTaskRunner : MonoBehaviour
     public void PrepareForZoom()
     {
         // ✅ Zoom 시작 전에 “카메라 기본값”에서 출발
-        if (mainCamera != null)
+        if (!isXR && mainCamera != null)
         {
             mainCamera.transform.position = camStartPos;
             mainCamera.transform.rotation = camStartRot;
@@ -86,7 +87,7 @@ public class ZoomTaskRunner : MonoBehaviour
             camFollow.ResetToStart();
         }
 
-        if (mainCamera != null)
+        if (!isXR && mainCamera != null)
         {
             mainCamera.transform.position = camStartPos;
             mainCamera.transform.rotation = camStartRot;
@@ -102,7 +103,7 @@ public class ZoomTaskRunner : MonoBehaviour
 
     IEnumerator CoZoom(StimulusController.ZoomTask z, float duration, int runId, Func<int, bool> isRunValid, Action onDone)
     {
-        if (zoomByFOV && mainCamera != null)
+        if (!isXR && zoomByFOV && mainCamera != null)
         {
             float from = mainCamera.fieldOfView;
             float to = (z == StimulusController.ZoomTask.ZoomIn) ? zoomInFOV : zoomOutFOV;
@@ -125,7 +126,7 @@ public class ZoomTaskRunner : MonoBehaviour
             yield break;
         }
 
-        if (zoomByCameraDolly && mainCamera != null)
+        if (!isXR && zoomByCameraDolly && mainCamera != null)
         {
             Vector3 startPos = mainCamera.transform.position;
             Quaternion startRot = mainCamera.transform.rotation;
