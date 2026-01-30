@@ -3,6 +3,10 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.InputSystem.Controls;
 
+
+using static StimulusController;
+
+
 public class StimulusController : MonoBehaviour
 {
     public enum TrialType { None, Move, Zoom }
@@ -184,4 +188,46 @@ public class StimulusController : MonoBehaviour
 
         busy = false;
     }
+
+
+    public void TriggerSpaceFromLSL()
+    {
+        if (busy) return;
+
+        // 아래 로직은 Update()에서 space 눌렀을 때와 동일하게 복붙
+        if (!executed && trial == TrialType.None)
+        {
+            AssignRandomTrial();
+            ShowSelection();
+            Debug.Log("[SELECT] (LSL)");
+            return;
+        }
+
+        if (!executed && trial != TrialType.None)
+        {
+            string label = (trial == TrialType.Move)
+                ? $"MOVE_{selMove}"
+                : $"ZOOM_{selZoom}";
+
+            markerSender?.SendOnSpace($"EXEC_{label}"); // (원하면 이 줄은 OFF 가능)
+            if (flowCo != null) StopCoroutine(flowCo);
+            flowCo = StartCoroutine(CoExecuteOnce());
+
+            Debug.Log($"[EXECUTE] {label} (LSL)");
+            return;
+        }
+
+        if (executed)
+        {
+            if (flowCo != null) StopCoroutine(flowCo);
+            flowCo = StartCoroutine(CoReturnToCenter());
+
+            Debug.Log("[RETURN] (LSL)");
+            return;
+        }
+    }
+
+
 }
+
+
