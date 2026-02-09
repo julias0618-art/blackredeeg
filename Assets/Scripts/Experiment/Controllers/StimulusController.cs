@@ -32,6 +32,15 @@ public class StimulusController : MonoBehaviour
 
     int currentRunId = 0;
     Coroutine flowCo;
+    int trialId = 0;   // 매 trial(선택~복귀) 단위로 증가
+
+    string CurrentLabel()
+    {
+        return (trial == TrialType.Move) ? $"MOVE_{selMove}" :
+               (trial == TrialType.Zoom) ? $"ZOOM_{selZoom}" :
+               "";
+    }
+
 
 
     void Update()
@@ -57,37 +66,45 @@ public class StimulusController : MonoBehaviour
             {
                 AssignRandomTrial();
                 ShowSelection();
-                Debug.Log("[SELECT]");
+
+                trialId++; // 새 trial 시작
+
+                string label = CurrentLabel(); // MOVE_Left 같은 라벨
+                markerSender?.SendDecide(trialId, label); // ✅ 1st Space: DECIDE
+
+                Debug.Log($"[SELECT] trial={trialId} {label}");
                 return;
             }
 
-            // 2) 실행용 Space (✅ 여기서만 마커 전송)
-            if (!executed && trial != TrialType.None)
-            {
-                string label = (trial == TrialType.Move)
-                ? $"MOVE_{selMove}"
-                : $"ZOOM_{selZoom}";
 
-                // ✅ 오직 여기서만 전송
-                markerSender?.SendOnSpace($"EXEC_{label}");
+            // 2) 실행용 Space (✅ 여기서만 마커 전송)
+            if(!executed && trial != TrialType.None)
+{
+                string label = CurrentLabel();
+
+                markerSender?.SendExec(trialId, label); // ✅ EXEC
 
                 if (flowCo != null) StopCoroutine(flowCo);
                 flowCo = StartCoroutine(CoExecuteOnce());
 
-                Debug.Log($"[EXECUTE] {label}");
+                Debug.Log($"[EXECUTE] trial={trialId} {label}");
                 return;
-            }       
+            }
+
 
             // 3) 복귀
             // 3) 복귀용 Space (❌ 마커 안 보냄)
             if (executed)
             {
+                markerSender?.SendReset(trialId); // ✅ RESET
+
                 if (flowCo != null) StopCoroutine(flowCo);
                 flowCo = StartCoroutine(CoReturnToCenter());
 
-                Debug.Log("[RETURN]");
+                Debug.Log($"[RETURN] trial={trialId}");
                 return;
-            }       
+            }
+
         }
     }
 
@@ -205,17 +222,17 @@ public class StimulusController : MonoBehaviour
 
         if (!executed && trial != TrialType.None)
         {
-            string label = (trial == TrialType.Move)
-                ? $"MOVE_{selMove}"
-                : $"ZOOM_{selZoom}";
+            string label = CurrentLabel();
 
-            markerSender?.SendOnSpace($"EXEC_{label}"); // (원하면 이 줄은 OFF 가능)
+            markerSender?.SendExec(trialId, label); // ✅ EXEC 마커
+
             if (flowCo != null) StopCoroutine(flowCo);
             flowCo = StartCoroutine(CoExecuteOnce());
 
             Debug.Log($"[EXECUTE] {label} (LSL)");
             return;
         }
+
 
         if (executed)
         {

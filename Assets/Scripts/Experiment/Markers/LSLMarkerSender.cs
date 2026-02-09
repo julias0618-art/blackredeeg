@@ -6,10 +6,10 @@ public class LSLMarkerSender : MonoBehaviour
     public bool enableLSL = true;
     public string lslStreamName = "UnityMarkers";
     public string lslStreamType = "Markers";
-    public string lslSourceId   = "unity_markers_001";
+    public string lslSourceId = "unity_markers_001";
     public bool logToConsole = true;
 
-    StreamOutlet outlet;
+    private StreamOutlet outlet;
 
     void Start()
     {
@@ -23,20 +23,32 @@ public class LSLMarkerSender : MonoBehaviour
         if (logToConsole) Debug.Log($"[LSL] Stream started: {lslStreamName}");
     }
 
-    // ✅ 스페이스 누른 "그 순간" 보내기 (중복 제한 없음)
-    public void SendOnSpace(string trialLabel)
+    public enum Phase { DECIDE, EXEC, RESET }
+
+    // phase: DECIDE/EXEC/RESET
+    // dirLabel: LEFT/RIGHT/UP/DOWN/ZOOM_IN/ZOOM_OUT 등 (RESET이면 빈 문자열 가능)
+    public void SendSpaceMarker(Phase phase, int trialId, string dirLabel = "")
     {
         if (!enableLSL || outlet == null) return;
 
         double lslTs = LSL.LSL.local_clock();
-        float  unityRt = Time.realtimeSinceStartup;
+        float unityRt = Time.realtimeSinceStartup;
 
-        // 한 줄 문자열로: 라벨 + 시간 2개
-        string marker = $"SPACE|{trialLabel}|unity_rt={unityRt:F6}|lsl={lslTs:F6}";
+        // 파싱 쉬운 key=value 포맷 추천
+        // 예) SPACE|phase=EXEC|trial=42|dir=LEFT|unity_rt=...|lsl=...
+        string marker =
+            $"SPACE|phase={phase}|trial={trialId}" +
+            (string.IsNullOrEmpty(dirLabel) ? "" : $"|dir={dirLabel}") +
+            $"|unity_rt={unityRt:F6}|lsl={lslTs:F6}";
 
         outlet.push_sample(new[] { marker });
 
         if (logToConsole)
             Debug.Log($"[LSL] {marker}");
     }
+
+    // --- 편의용 wrapper (원하면 사용) ---
+    public void SendDecide(int trialId, string dirLabel) => SendSpaceMarker(Phase.DECIDE, trialId, dirLabel);
+    public void SendExec(int trialId, string dirLabel) => SendSpaceMarker(Phase.EXEC, trialId, dirLabel);
+    public void SendReset(int trialId) => SendSpaceMarker(Phase.RESET, trialId);
 }
