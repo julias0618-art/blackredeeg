@@ -112,10 +112,16 @@ public class StimulusController : MonoBehaviour
 
     void AssignRandomTrial()
     {
-        trial = (Random.value < 0.5f) ? TrialType.Move : TrialType.Zoom;
-        if (trial == TrialType.Move) selMove = GetRandomMove();
-        else                         selZoom = GetRandomZoom();
+        trial = TrialType.Move; // 무조건 Move
+        selMove = GetRandomLeftRight();
     }
+
+    MoveTask GetRandomLeftRight()
+    {
+        return (Random.value < 0.5f) ? MoveTask.Left : MoveTask.Right;
+    }
+
+
 
     MoveTask GetRandomMove()
     {
