@@ -1,0 +1,44 @@
+# ===== Unity =====
+[Ll]ibrary/
+[Tt]emp/
+[Oo]bj/
+[Bb]uild/
+[Bb]uilds/
+[Ll]ogs/
+UserSettings/
+
+# ===== Visual Studio / IDE =====
+.vs/
+.vscode/
+*.csproj
+*.sln
+*.suo
+*.user
+*.userprefs
+*.pidb
+*.booproj
+*.svd
+*.pdb
+*.mdb
+*.opendb
+*.VC.db
+
+# ===== OS =====
+.DS_Store
+Thumbs.db
+
+# ===== Unity Auto Generated =====
+*.apk
+*.aab
+*.unitypackage
+*.crash
+sysinfo.txt
+
+# ===== Build Cache =====
+/[Bb]uildCache/
+/[Ll]ibrary/PackageCache/
+
+# ===== Meta / XR / Temp Files =====
+*.log
+*.tmp
+*.bak
